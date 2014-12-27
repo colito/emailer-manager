@@ -3,15 +3,15 @@ require_once('operator.php');
 class PlaceholderManager extends Operator
 {
     # Finds placeholders within the specified source
-    public function seek_placeholders($template, $reference)
+    public function seek_placeholders($template, $reference, $depth)
     {
         @$template_name = $template['name'];
         @$source = $template['source_code'];
 
         if(strpos($reference, 'template') !== false)
-            $preceding_path = 'templates/'.$template_name.'/';
+            $preceding_path = $depth.'templates/'.$template_name.'/';
         else if(strpos($reference, 'templata') !== false)
-            $preceding_path = '';
+            $preceding_path = $depth;
         else
             return false;
 
@@ -37,9 +37,9 @@ class PlaceholderManager extends Operator
         return $placeholders_found;
     }
 
-    public function placeholder_lists($template, $content, $page_name, $header_files)
+    public function placeholder_lists($template, $content, $page_name, $header_files, $depth)
     {
-        $config = new Config();
+        $config = TConfig();
         $template_name = $template['name'];
 
         # Order of placeholders is crucial. Eg: By placing body-content at the end of the array,
@@ -49,52 +49,59 @@ class PlaceholderManager extends Operator
         $all_placeholders = array(
             'templata:app-name' => $config->app_name,
             'app-name' => $config->app_name,
-            'template:res' => 'templates/'.$template_name,
-            'template-fs' => 'templates/'.$template_name,
+            'template:res' => $depth.'templates/'.$template_name,
+            'template-fs' => $depth.'templates/'.$template_name,
             'template:css' => $this->unpack_css_files(),
             'page-title' => $page_name,
             'header-files' => $this->unpack_header_resources($header_files),
             'templata:right-click' => $this->right_click_switch($config->right_click),
             'body-content' => $content,
             'base-url' => '<base href="'.get_base_url().'"/>',
-            'relative' => '',
-            'favicon' => 'templates/'.$template['name'].'/images/favicon/favicon.ico',
-            'template-favicon' => 'templates/'.$template['name'].'/images/favicon/favicon.ico',
-            'templata:libs' => $config->templata_libraries,
-            'libs' => $config->templata_libraries,
-            'templata:images' => $config->templata_images_directory,
-            'template:images' => 'templates/'.$template_name.'/'.'images',
-            'templata:jquery' => $this->get_jquery(''),
-            'validation:contact-form' => 'tools/validation/contact-form.php',
-            'navi:desktop' => $this->navigation_menu(),
-            'navi:mobile' => $this->navigation_menu()
+            'relative' => $depth,
+            'favicon' => $depth.'templates/'.$template['name'].'/images/favicon/favicon.ico',
+            'template-favicon' => $depth.'templates/'.$template['name'].'/images/favicon/favicon.ico',
+            'templata:libs' => $depth.$config->templata_libraries,
+            'libs' => $depth.$config->templata_libraries,
+            'templata:images' => $depth.$config->templata_images_directory,
+            'template:images' => $depth.'templates/'.$template_name.'/'.'images',
+            'templata:jquery' => $this->get_jquery($depth),
+            'validation:contact-form' => $depth.'tools/validation/contact-form.php',
+            'navi:desktop' => $this->navigation_menu($depth),
+            'navi:mobile' => $this->navigation_menu($depth)
         );
 
-        require_once('templates/videospot/includes/placeholders.php');
-        $vinfo = new TemplatePlaceholders();
-        $custom_template_placeholders = $vinfo->placeholders;
+        # Checks if there are custom placeholders defined for the current active template
+        # and adds them to the mix if there are any
+        if(file_exists('templates/'.$template_name.'/includes/placeholders.php'))
+        {
+            require_once('templates/'.$template_name.'/includes/placeholders.php');
+            $ctp = new TemplatePlaceholders();
+            $custom_template_placeholders = $ctp->placeholders;
+
+            $all_placeholders = array_merge($all_placeholders, $custom_template_placeholders);
+        }
 
         $template_placeholders = array();
 
         # Template placeholders
-        $template_placeholders[] = $this->seek_placeholders($template, 'template-res:');
-        $template_placeholders[] = $this->seek_placeholders($content, 'template-res:');
+        $template_placeholders[] = $this->seek_placeholders($template, 'template-res:', $depth);
+        $template_placeholders[] = $this->seek_placeholders($content, 'template-res:', $depth);
 
         # Templata placeholders
-        $templata_placeholders[] = $this->seek_placeholders($template['source_code'], 'templata-res:');
-        $templata_placeholders[] = $this->seek_placeholders($content, 'templata-res:');
+        $templata_placeholders[] = $this->seek_placeholders($template['source_code'], 'templata-res:', $depth);
+        $templata_placeholders[] = $this->seek_placeholders($content, 'templata-res:', $depth);
 
         # Boxing all placeholders within a single array
-        $placeholder_box['all'] = array_merge($all_placeholders, $custom_template_placeholders);
+        $placeholder_box['all'] = $all_placeholders;
         $placeholder_box['templata_res'] = $templata_placeholders;
         $placeholder_box['template_res'] = $template_placeholders;
 
         return $placeholder_box;
     }
 
-    public function replace_placeholders($template, $content, $page_name, $header_files)
+    public function replace_placeholders($template, $content, $page_name, $header_files, $depth)
     {
-        $placeholders = $this->placeholder_lists($template, $content, $page_name, $header_files);
+        $placeholders = $this->placeholder_lists($template, $content, $page_name, $header_files, $depth);
 
         $general_placeholders = $placeholders['all'];
         $templata_placeholders = $placeholders['templata_res'];
